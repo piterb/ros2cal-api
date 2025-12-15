@@ -47,11 +47,11 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Verify auth (debug)
-        run: |
-          gcloud auth list
-          gcloud config list
-          gcloud auth print-access-token >/dev/null
+ #     - name: Verify auth (debug)
+ #       run: |
+ #         gcloud auth list
+ #         gcloud config list
+ #         gcloud auth print-access-token >/dev/null
 
       - name: Configure Docker auth for Artifact Registry
         run: |
