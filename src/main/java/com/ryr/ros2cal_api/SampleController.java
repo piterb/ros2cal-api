@@ -6,11 +6,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/roster")
-public class RosterController {
+@RequestMapping("/sample")
+public class SampleController {
 
-    @GetMapping("/convert")
-    public ResponseEntity<String> convertRoster() {
-        return ResponseEntity.ok("Sample roster conversion");
+    @GetMapping("/hello")
+    public ResponseEntity<String> hello() {
+        return ResponseEntity.ok("Sample controller says hello!");
     }
 }
