@@ -15,7 +15,7 @@ public class RosterController {
     }
 
     @GetMapping("/convert2")
-    public ResponseEntity<String> convertRoster() {
+    public ResponseEntity<String> convertRoster2() {
         return ResponseEntity.ok("Sample roster conversion 2");
     }
 }
