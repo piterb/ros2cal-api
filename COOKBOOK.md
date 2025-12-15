@@ -1,0 +1,76 @@
+# Deployment Cookbook: GCP + Cloud Run + GitHub Actions
+
+Background: small Spring Boot REST API that exposes `/healthz` (health) and `/roster/convert` (sample). Containerized with a multi-stage Dockerfile (Gradle build → distroless Java 17) and configured to read `PORT` for Cloud Run.
+
+Architecture: GitHub Actions builds and tests with Gradle, builds/pushes a Docker image to Artifact Registry, then deploys that image to Cloud Run using Workload Identity Federation (OIDC) instead of long-lived JSON keys.
+
+Stack:
+- Java 17 / Spring Boot (REST)
+- Gradle build with `bootJar`
+- Docker multi-stage → distroless Java 17 base
+- Google Cloud Run + Artifact Registry
+- GitHub Actions with `google-github-actions/*` actions and WIF
+
+Prerequisites:
+- Google Cloud project with billing.
+- GitHub repo with branch `main` (workflow trigger).
+- Local Docker + Gradle (or rely on CI) if building locally.
+- IAM permissions to create Artifact Registry, Service Accounts, WIF pool/provider, and grant roles.
+
+Overview (what you set up):
+1) Enable required APIs.
+2) Create Artifact Registry (Docker).
+3) Create deployer Service Account with least-privilege roles.
+4) Create WIF pool/provider for GitHub with repo-bound condition.
+5) Bind WIF principal set to the service account (Workload Identity User + Service Account Token Creator).
+6) Enable Cloud Run Admin API.
+7) Use `.github/workflows/deploy.yml` to build/push/deploy on push to `main`.
+
+## 1) Initial setup
+- Create a project and link it to a billing account.
+- Enable APIs: Artifact Registry API, Cloud Resource Manager API, IAM Service Account Credentials API.
+
+## 2) Artifact Registry (Docker)
+- Format: Docker, Mode: Standard.
+- Location: e.g., `europe-west3` (lower latency in Europe).
+- Immutable tags: off (for development).
+- Retention policies: keep last 3 images and delete after 1h (for dev/lab).
+
+## 3) Service Account for deploy
+- IAM & Admin → Service Accounts → Create.
+- Name: `gha-cloudrun-deployer` (ID can stay automatic).
+- Grant roles: Cloud Run Admin (`roles/run.admin`), Artifact Registry Writer (`roles/artifactregistry.writer`), Service Account User (`roles/iam.serviceAccountUser`).
+
+## 4) WIF provider for GitHub
+- Create a Workload Identity Pool, e.g., `github-pool`, provider type OIDC.
+- Provider details: GitHub, issuer URL: `https://token.actions.githubusercontent.com`, audiences: default.
+- Attributes: `google.subject => assertion.sub`, `attribute.repository => assertion.repository`.
+- Condition: `assertion.repository == "YOUR_OWNER/YOUR_REPO"`.
+- PrincipalSet URL to use in IAM (UI hides it):  
+  `principalSet://iam.googleapis.com/projects/878047055552/locations/global/workloadIdentityPools/github-pool/attribute.repository/YOUR_OWNER/YOUR_REPO`
+
+## 5) Link WIF ↔ Service Account
+- In the WIF page, copy the IAM Principal name (or use the PrincipalSet URL above).
+- In IAM & Admin → Service Accounts → pick `gha-cloudrun-deployer` → Grant Access.
+- Paste the principal and assign roles: Workload Identity User + Service Account Token Creator.  
+  (If using the principal set URL, replace `YOUR_OWNER/YOUR_REPO` appropriately.)
+
+## 6) Enable Cloud Run Admin API
+- Enable the API, otherwise deploy will fail.
+
+## 7) GitHub Actions deploy pipeline
+- Workflow is in `.github/workflows/deploy.yml`.
+- Check/fill env values (project, region, Cloud Run service name, Artifact Registry repo, WIF provider, service account email, image name). Defaults in the repo:
+  - `GCP_PROJECT_ID`: `ros2cal-481314`
+  - `GCP_REGION`: `europe-west3`
+  - `CLOUD_RUN_SERVICE`: `ros2cal`
+  - `ARTIFACT_REPO`: `lab`
+  - `WIF_PROVIDER`: `projects/878047055552/locations/global/workloadIdentityPools/github-pool/providers/github`
+  - `GCP_SA_EMAIL`: `gha-cloudrun-deployer@ros2cal-481314.iam.gserviceaccount.com`
+  - `IMAGE_NAME`: `ros2cal`
+- Workflow steps: OIDC auth, `gcloud` setup, Docker auth to Artifact Registry, `./gradlew test`, build & push Docker image, deploy to Cloud Run with `--allow-unauthenticated` (remove for private).
+- Trigger: push to `main`.
+
+### Notes
+- App reads `PORT` from env (`server.port: ${PORT:8080}`) and exposes `GET /healthz` for Cloud Run health checks.
+- For stricter/production use, enable immutable tags and adjust retention in Artifact Registry.
