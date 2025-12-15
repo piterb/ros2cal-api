@@ -1,0 +1,81 @@
+name: Build & Deploy to Cloud Run
+
+on:
+  push:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  # === FILL THESE ===
+  GCP_PROJECT_ID: "ros2cal-481314"
+  GCP_REGION: "europe-west3"
+  CLOUD_RUN_SERVICE: "ros2cal"
+
+  # Artifact Registry repository name (Docker repo you created in Artifact Registry)
+  ARTIFACT_REPO: "lab"
+
+  # Workload Identity Provider resource name (from GCP WIF UI)
+  # Example: projects/123456789/locations/global/workloadIdentityPools/github-pool/providers/github
+  WIF_PROVIDER: "projects/878047055552/locations/global/workloadIdentityPools/github-pool/providers/github"
+
+  # Service Account email (the one you created for GitHub Actions)
+  # Example: gha-cloudrun-deployer@YOUR_PROJECT_ID.iam.gserviceaccount.com
+  GCP_SA_EMAIL: "gha-cloudrun-deployer@ros2cal-481314.iam.gserviceaccount.com"
+
+  # Image name inside the repo (can be anything, keep stable)
+  IMAGE_NAME: "ros2cal"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud (OIDC / WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: "${{ env.WIF_PROVIDER }}"
+          service_account: "${{ env.GCP_SA_EMAIL }}"
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker auth for Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build & test (Gradle)
+        run: |
+          chmod +x ./gradlew
+          ./gradlew test --no-daemon
+
+      - name: Build Docker image
+        run: |
+          IMAGE_URI="${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          echo "IMAGE_URI=$IMAGE_URI" >> $GITHUB_ENV
+          docker build -t "$IMAGE_URI" .
+
+      - name: Push Docker image
+        run: |
+          docker push "$IMAGE_URI"
+
+      - name: Deploy to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: "${{ env.CLOUD_RUN_SERVICE }}"
+          region: "${{ env.GCP_REGION }}"
+          image: "${{ env.IMAGE_URI }}"
+          # For a lab: make it public (you can remove later)
+          flags: >-
+            --allow-unauthenticated
+            --min-instances=0
+            --max-instances=1
+
+      - name: Show service URL
+        run: |
+          echo "Deployed to: ${{ steps.deploy.outputs.url }}"
