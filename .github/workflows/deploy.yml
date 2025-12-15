@@ -41,20 +41,21 @@ jobs:
         with:
           workload_identity_provider: "${{ env.WIF_PROVIDER }}"
           service_account: "${{ env.GCP_SA_EMAIL }}"
-          token_format: "access_token"
+          create_credentials_file: true
+          project_id: "${{ env.GCP_PROJECT_ID }}"
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
 
+      - name: Verify auth (debug)
+        run: |
+          gcloud auth list
+          gcloud config list
+          gcloud auth print-access-token >/dev/null
+
       - name: Configure Docker auth for Artifact Registry
         run: |
           gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
-
-      - name: Docker login to Artifact Registry (explicit)
-        run: |
-          echo "${{ steps.auth.outputs.access_token }}" | \
-            docker login -u oauth2accesstoken --password-stdin \
-            https://${{ env.GCP_REGION }}-docker.pkg.dev
 
       - name: Build & test (Gradle)
         run: |
