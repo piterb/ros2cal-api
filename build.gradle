@@ -45,4 +45,7 @@ tasks.named('bootJar') {
 
 tasks.named('test') {
 	useJUnitPlatform()
+	if (System.getenv("SKIP_TESTS")?.toBoolean() == true) {
+		enabled = false
+	}
 }
