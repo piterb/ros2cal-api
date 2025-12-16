@@ -26,6 +26,49 @@ Overview (what you set up):
 6) Enable Cloud Run Admin API.
 7) Use `.github/workflows/deploy.yml` to build/push/deploy on push to `main`.
 
+## Add PostgreSQL persistence
+- Dependencies: add `spring-boot-starter-data-jpa`, Flyway, Postgres driver in `build.gradle` (H2 for tests if you run them).
+- Config: set `spring.datasource.url/user/password` via env (e.g., Secret Manager) in `src/main/resources/application.yaml`; keep `spring.jpa.hibernate.ddl-auto=validate`; enable Flyway.
+- Entities: create JPA entities under `src/main/java/com/ryr/ros2cal_api/<feature>/` with matching repositories and services; expose controllers that write/read via repositories.
+- Migration: create DDL in `src/main/resources/db/migration/Vx__*.sql` so Flyway creates tables; align columns with entities.
+- Docker/Cloud Run: image built by `Dockerfile`; Cloud Run uses env vars for DB (no baked-in secrets).
+- CI: `.github/workflows/deploy.yml` builds/pushes/deploys; adjust envs for DB secrets or set `SKIP_TESTS` as needed.
+
+Example entity (trim to your domain):
+```java
+@Entity
+@Table(name = "sample")
+public class Sample {
+    @Id
+    @Column(nullable = false, updatable = false)
+    private UUID id;
+
+    @Column(nullable = false, length = 255)
+    private String message;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt;
+}
+```
+
+Parts to touch when adding a new table/feature:
+- `build.gradle`: ensure JPA/Flyway/Postgres dependencies are present.
+- `src/main/resources/application.yaml`: datasource env keys, `ddl-auto: validate`, Flyway enabled.
+- `src/main/resources/db/migration/`: new Flyway migration for the table.
+- `src/main/java/...`: entity + repository + service + controller exposing the endpoint.
+- `Dockerfile`: no change, but ensure DB envs are supplied at runtime.
+- `.github/workflows/deploy.yml`: set env or secrets for DB connection if deploying via GitHub Actions.
+
+### Secrets and Cloud Run env
+- Enable Secret Manager; add secrets for DB URL/user/password.
+- Grant `Secret Manager Secret Accessor` to the Cloud Run runtime service account (project-number SA).
+- In Cloud Run → Edit and deploy new revision → set env vars and attach secrets to them (e.g., `DB_URL`, `DB_USER`, `DB_PASS`).
+
+### Handy commands
+- Run with env file: `docker run --rm -p 8080:8080 --env-file .env -e PORT=8080 -e SPRING_DATASOURCE_URL=jdbc:h2:mem:test <image>`
+- Inspect container env: `docker inspect <NAME> --format '{{range .Config.Env}}{{println .}}{{end}}'`
+- Quick DNS check from container: `docker run --rm alpine sh -lc "apk add --no-cache bind-tools >/dev/null && nslookup <HOST>"`
+
 ## 1) Initial setup
 - Create a project and link it to a billing account.
 - Enable APIs: Artifact Registry API, Cloud Resource Manager API, IAM Service Account Credentials API.
