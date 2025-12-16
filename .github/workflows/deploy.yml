@@ -99,7 +99,7 @@ jobs:
             SECRET_BINDINGS+="$KEY=${SECRET_NAME}:latest\n"
           done <<< "${CLOUD_RUN_SECRET_VARS}"
           {
-            echo "CLOUD_RUN_SECRET_BINDINGS<<'EOF'"
+            echo "CLOUD_RUN_SECRET_BINDINGS<<EOF"
             printf '%b' "$SECRET_BINDINGS"
             echo "EOF"
           } >> "$GITHUB_ENV"
