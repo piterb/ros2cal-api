@@ -14,6 +14,7 @@ env:
   GCP_REGION: "europe-west3"
   CLOUD_RUN_SERVICE: "ros2cal"
   SKIP_TESTS: "true"
+  ENVIRONMENT: "prod" # GitHub Environment name to read vars/secrets from
 
   # Artifact Registry repository name (Docker repo you created in Artifact Registry)
   ARTIFACT_REPO: "lab"
@@ -29,8 +30,19 @@ env:
   # Image name inside the repo (can be anything, keep stable)
   IMAGE_NAME: "ros2cal"
 
+  # Non-secret env vars for Cloud Run (sourced from GitHub Environment vars)
+  CLOUD_RUN_ENV_VARS: |
+    SPRING_PROFILES_ACTIVE=${{ vars.SPRING_PROFILES_ACTIVE }}
+    SPRING_DATASOURCE_URL=${{ vars.SPRING_DATASOURCE_URL }}
+
+  # Secret payloads from GitHub Environment secrets (KEY=VALUE). Values are not logged.
+  CLOUD_RUN_SECRET_VARS: |
+    SPRING_DATASOURCE_USERNAME=${{ secrets.SPRING_DATASOURCE_USERNAME }}
+    SPRING_DATASOURCE_PASSWORD=${{ secrets.SPRING_DATASOURCE_PASSWORD }}
+
 jobs:
   deploy:
+    environment: ${{ env.ENVIRONMENT }}
     runs-on: ubuntu-latest
 
     steps:
@@ -73,12 +85,34 @@ jobs:
         run: |
           docker push "$IMAGE_URI"
 
+      - name: Sync secrets to Secret Manager
+        if: env.CLOUD_RUN_SECRET_VARS != ''
+        run: |
+          set -euo pipefail
+          SECRET_BINDINGS=""
+          while IFS='=' read -r KEY VALUE; do
+            [ -z "$KEY" ] && continue
+            SECRET_NAME="$KEY"
+            if ! gcloud secrets describe "$SECRET_NAME" --project="${{ env.GCP_PROJECT_ID }}" >/dev/null 2>&1; then
+              gcloud secrets create "$SECRET_NAME" --replication-policy=automatic --project="${{ env.GCP_PROJECT_ID }}"
+            fi
+            printf '%s' "$VALUE" | gcloud secrets versions add "$SECRET_NAME" --data-file=- --project="${{ env.GCP_PROJECT_ID }}"
+            SECRET_BINDINGS+="$KEY=${SECRET_NAME}:latest\n"
+          done <<< "${CLOUD_RUN_SECRET_VARS}"
+          {
+            echo "CLOUD_RUN_SECRET_BINDINGS<<'EOF'"
+            printf '%b' "$SECRET_BINDINGS"
+            echo "EOF"
+          } >> "$GITHUB_ENV"
+
       - name: Deploy to Cloud Run
         uses: google-github-actions/deploy-cloudrun@v2
         with:
           service: "${{ env.CLOUD_RUN_SERVICE }}"
           region: "${{ env.GCP_REGION }}"
           image: "${{ env.IMAGE_URI }}"
+          env_vars: "${{ env.CLOUD_RUN_ENV_VARS }}"
+          secret_env: "${{ env.CLOUD_RUN_SECRET_BINDINGS }}"
           # For a lab: make it public (you can remove later)
           flags: >-
             --allow-unauthenticated

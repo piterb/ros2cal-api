@@ -82,7 +82,7 @@ Parts to touch when adding a new table/feature:
 ## 3) Service Account for deploy
 - IAM & Admin → Service Accounts → Create.
 - Name: `gha-cloudrun-deployer` (ID can stay automatic).
-- Grant roles: Cloud Run Admin (`roles/run.admin`), Artifact Registry Writer (`roles/artifactregistry.writer`), Service Account User (`roles/iam.serviceAccountUser`).
+- Grant roles: Cloud Run Admin (`roles/run.admin`), Artifact Registry Writer (`roles/artifactregistry.writer`), Service Account User (`roles/iam.serviceAccountUser`), Secret Manager Admin (`roles/secretmanager.admin`)
 
 ## 4) WIF provider for GitHub
 - Create a Workload Identity Pool, e.g., `github-pool`, provider type OIDC.
