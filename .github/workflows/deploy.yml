@@ -32,8 +32,7 @@ env:
   SPRING_DATASOURCE_PASSWORD: ${{ secrets.SPRING_DATASOURCE_PASSWORD }}
 
 jobs:
-  deploy:
-    environment: prod
+  build:
     runs-on: ubuntu-latest
 
     steps:
@@ -52,12 +51,9 @@ jobs:
           if [ -z "${GCP_DEPLOY_SA_EMAIL}" ]; then
             missing+=("GCP_DEPLOY_SA_EMAIL")
           fi
-          if [ -z "${SPRING_DATASOURCE_PASSWORD}" ]; then
-            missing+=("SPRING_DATASOURCE_PASSWORD (Secret Manager secret name)")
-          fi
           if [ ${#missing[@]} -ne 0 ]; then
             echo "Missing required GitHub Environment variables: ${missing[*]}" >&2
-            echo "Set them in the GitHub Environment before running deploy." >&2
+            echo "Set them in the GitHub Environment before running build/deploy." >&2
             exit 1
           fi
 
@@ -75,17 +71,41 @@ jobs:
         run: |
           gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
 
-      - name: Build Docker image
+      - name: Build and push Docker image
+        id: build
         run: |
           IMAGE_URI="${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
-          echo "IMAGE_URI=$IMAGE_URI" >> "$GITHUB_ENV"
+          echo "image_uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
           docker build -t "$IMAGE_URI" .
-
-      - name: Push Docker image
-        run: |
           docker push "$IMAGE_URI"
 
+    outputs:
+      image_uri: ${{ steps.build.outputs.image_uri }}
+
+  deploy:
+    needs: build
+    environment: prod
+    runs-on: ubuntu-latest
+
+    env:
+      IMAGE_URI: ${{ needs.build.outputs.image_uri }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud (OIDC / WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.GCP_WIF_PROVIDER }}
+          service_account: ${{ env.GCP_DEPLOY_SA_EMAIL }}
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
       - name: Deploy to Cloud Run
+        id: deploy
         uses: google-github-actions/deploy-cloudrun@v2
         with:
           service: ${{ env.CLOUD_RUN_SERVICE }}
@@ -94,6 +114,15 @@ jobs:
           env_vars: ${{ env.CLOUD_RUN_ENV_VARS }}
           secrets: |
             SPRING_DATASOURCE_PASSWORD=${{ env.SPRING_DATASOURCE_PASSWORD }}:latest
+
+      - name: Dump service conditions on failure
+        if: failure()
+        run: |
+          echo "Deploy failed; Cloud Run service conditions:" >&2
+          gcloud run services describe "${CLOUD_RUN_SERVICE}" \
+            --region "${GCP_REGION}" \
+            --project "${GCP_PROJECT_ID}" \
+            --format="table(status.conditions[type],status.conditions[status],status.conditions[reason],status.conditions[message])" || true
 
       - name: Show service URL
         run: |
