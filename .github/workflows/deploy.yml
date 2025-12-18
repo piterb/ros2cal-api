@@ -96,6 +96,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Authenticate to Google Cloud (OIDC / WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.GCP_WIF_PROVIDER }}
+          service_account: ${{ env.GCP_DEPLOY_SA_EMAIL }}
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
       - name: Sync secrets and render Cloud Run secrets map
         run: |
           set -euo pipefail
@@ -120,16 +130,6 @@ jobs:
             rendered="${rendered}${key}=${secret_name}:latest\n"
           done <<< "$SECRET_VARS"
           printf "CLOUD_RUN_SECRETS_RENDERED<<'EOF'\n%sEOF\n" "$rendered" >> "$GITHUB_ENV"
-
-      - name: Authenticate to Google Cloud (OIDC / WIF)
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ env.GCP_WIF_PROVIDER }}
-          service_account: ${{ env.GCP_DEPLOY_SA_EMAIL }}
-          project_id: ${{ env.GCP_PROJECT_ID }}
-
-      - name: Set up gcloud
-        uses: google-github-actions/setup-gcloud@v2
 
       - name: Deploy to Cloud Run
         id: deploy
