@@ -1,122 +1,96 @@
-name: Build & Deploy to Cloud Run
+name: Deploy
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
+    paths-ignore:
+      - "infra/**"
+      - ".github/workflows/infra.yml"
 
 permissions:
   contents: read
   id-token: write
 
 env:
-  # === FILL THESE ===
-  GCP_PROJECT_ID: "ros2cal-481314"
-  GCP_REGION: "europe-west3"
-  CLOUD_RUN_SERVICE: "ros2cal"
-  SKIP_TESTS: "false"
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GCP_REGION: ${{ vars.GCP_REGION }}
+  GCP_WIF_PROVIDER: ${{ vars.GCP_WIF_PROVIDER }}
+  GCP_DEPLOY_SA_EMAIL: ${{ vars.GCP_DEPLOY_SA_EMAIL }}
 
-  # Artifact Registry repository name (Docker repo you created in Artifact Registry)
-  ARTIFACT_REPO: "lab"
+  ARTIFACT_REPO: ${{ vars.ARTIFACT_REPO }}
+  CLOUD_RUN_SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+  IMAGE_NAME: "app"
 
-  # Workload Identity Provider resource name (from GCP WIF UI)
-  # Example: projects/123456789/locations/global/workloadIdentityPools/github-pool/providers/github
-  WIF_PROVIDER: "projects/878047055552/locations/global/workloadIdentityPools/github-pool/providers/github"
-
-  # Service Account email (the one you created for GitHub Actions)
-  # Example: gha-cloudrun-deployer@YOUR_PROJECT_ID.iam.gserviceaccount.com
-  GCP_SA_EMAIL: "gha-cloudrun-deployer@ros2cal-481314.iam.gserviceaccount.com"
-
-  # Image name inside the repo (can be anything, keep stable)
-  IMAGE_NAME: "ros2cal"
-
-  # Non-secret env vars for Cloud Run (sourced from GitHub Environment vars)
+  # Non-secret env vars for Cloud Run
   CLOUD_RUN_ENV_VARS: |
     SPRING_PROFILES_ACTIVE=${{ vars.SPRING_PROFILES_ACTIVE }}
-    SPRING_DATASOURCE_URL=${{ vars.SPRING_DATASOURCE_URL }}
-    SPRING_DATASOURCE_USERNAME=${{ vars.SPRING_DATASOURCE_USERNAME }}
 
-  # Secret payloads from GitHub Environment secrets (KEY=VALUE). Values are not logged.
-  CLOUD_RUN_SECRET_VARS: |
-    SPRING_DATASOURCE_PASSWORD=${{ secrets.SPRING_DATASOURCE_PASSWORD }}
+  # Secret names in Secret Manager (names only, not values)
+  SPRING_DATASOURCE_USERNAME: ${{ vars.SPRING_DATASOURCE_USERNAME }}
+  SPRING_DATASOURCE_PASSWORD: ${{ vars.SPRING_DATASOURCE_PASSWORD }}
+  SPRING_DATASOURCE_URL: ${{ vars.SPRING_DATASOURCE_URL }}
 
 jobs:
   deploy:
-    environment: prod
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validate required deploy vars
+        run: |
+          missing=()
+          if [ -z "${ARTIFACT_REPO}" ]; then
+            missing+=("ARTIFACT_REPO")
+          fi
+          if [ -z "${CLOUD_RUN_SERVICE}" ]; then
+            missing+=("CLOUD_RUN_SERVICE")
+          fi
+          if [ -z "${GCP_DEPLOY_SA_EMAIL}" ]; then
+            missing+=("GCP_DEPLOY_SA_EMAIL")
+          fi
+          if [ ${#missing[@]} -ne 0 ]; then
+            echo "Missing required GitHub Environment variables: ${missing[*]}" >&2
+            echo "Set them in the GitHub Environment before running deploy." >&2
+            exit 1
+          fi
+
       - name: Authenticate to Google Cloud (OIDC / WIF)
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: "${{ env.WIF_PROVIDER }}"
-          service_account: "${{ env.GCP_SA_EMAIL }}"
-          create_credentials_file: true
-          project_id: "${{ env.GCP_PROJECT_ID }}"
+          workload_identity_provider: ${{ env.GCP_WIF_PROVIDER }}
+          service_account: ${{ env.GCP_DEPLOY_SA_EMAIL }}
+          project_id: ${{ env.GCP_PROJECT_ID }}
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
-
- #     - name: Verify auth (debug)
- #       run: |
- #         gcloud auth list
- #         gcloud config list
- #         gcloud auth print-access-token >/dev/null
 
       - name: Configure Docker auth for Artifact Registry
         run: |
           gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
 
-      - name: Build & test (Gradle)
-        run: |
-          chmod +x ./gradlew
-          ./gradlew test --no-daemon
-
       - name: Build Docker image
         run: |
           IMAGE_URI="${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
-          echo "IMAGE_URI=$IMAGE_URI" >> $GITHUB_ENV
+          echo "IMAGE_URI=$IMAGE_URI" >> "$GITHUB_ENV"
           docker build -t "$IMAGE_URI" .
 
       - name: Push Docker image
         run: |
           docker push "$IMAGE_URI"
 
-      - name: Sync secrets to Secret Manager
-        if: env.CLOUD_RUN_SECRET_VARS != ''
-        run: |
-          set -euo pipefail
-          SECRET_BINDINGS=""
-          while IFS='=' read -r KEY VALUE; do
-            [ -z "$KEY" ] && continue
-            SECRET_NAME="$KEY"
-            if ! gcloud secrets describe "$SECRET_NAME" --project="${{ env.GCP_PROJECT_ID }}" >/dev/null 2>&1; then
-              gcloud secrets create "$SECRET_NAME" --replication-policy=automatic --project="${{ env.GCP_PROJECT_ID }}"
-            fi
-            printf '%s' "$VALUE" | gcloud secrets versions add "$SECRET_NAME" --data-file=- --project="${{ env.GCP_PROJECT_ID }}"
-            SECRET_BINDINGS+="$KEY=${SECRET_NAME}:latest\n"
-          done <<< "${CLOUD_RUN_SECRET_VARS}"
-          {
-            echo "CLOUD_RUN_SECRET_BINDINGS<<EOF"
-            printf '%b' "$SECRET_BINDINGS"
-            echo "EOF"
-          } >> "$GITHUB_ENV"
-
       - name: Deploy to Cloud Run
         uses: google-github-actions/deploy-cloudrun@v2
         with:
-          service: "${{ env.CLOUD_RUN_SERVICE }}"
-          region: "${{ env.GCP_REGION }}"
-          image: "${{ env.IMAGE_URI }}"
-          env_vars: "${{ env.CLOUD_RUN_ENV_VARS }}"
-          secrets: "${{ env.CLOUD_RUN_SECRET_BINDINGS }}"
-          # For a lab: make it public (you can remove later)
-          flags: >-
-            --allow-unauthenticated
-            --min-instances=0
-            --max-instances=1
+          service: ${{ env.CLOUD_RUN_SERVICE }}
+          region: ${{ env.GCP_REGION }}
+          image: ${{ env.IMAGE_URI }}
+          env_vars: ${{ env.CLOUD_RUN_ENV_VARS }}
+          secrets: |
+            SPRING_DATASOURCE_USERNAME=${{ env.SPRING_DATASOURCE_USERNAME }}:latest
+            SPRING_DATASOURCE_PASSWORD=${{ env.SPRING_DATASOURCE_PASSWORD }}:latest
+            SPRING_DATASOURCE_URL=${{ env.SPRING_DATASOURCE_URL }}:latest
 
       - name: Show service URL
         run: |

@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Gradle test
+        run: |
+          chmod +x ./gradlew
+          ./gradlew test --no-daemon
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.6.6"
+
+      - name: Terraform fmt (bootstrap)
+        run: |
+          cd infra/bootstrap
+          terraform fmt -check
+
+      - name: Terraform validate (bootstrap)
+        run: |
+          cd infra/bootstrap
+          terraform init -backend=false
+          terraform validate
+
+      - name: Terraform fmt (main)
+        run: |
+          cd infra/main
+          terraform fmt -check
+
+      - name: Terraform validate (main)
+        run: |
+          cd infra/main
+          terraform init -backend=false
+          terraform validate
