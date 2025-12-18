@@ -28,8 +28,9 @@ env:
     SPRING_DATASOURCE_USERNAME=${{ vars.SPRING_DATASOURCE_USERNAME }}
     SPRING_DATASOURCE_URL=${{ vars.SPRING_DATASOURCE_URL }}
 
-  # Secret names in Secret Manager (names only, not values)
-  SPRING_DATASOURCE_PASSWORD: ${{ secrets.SPRING_DATASOURCE_PASSWORD }}
+  # Secrets (value = GitHub Secret). Names in Secret Manager sa generujú automaticky.
+  SECRET_VARS: |
+    SPRING_DATASOURCE_PASSWORD=${{ secrets.SPRING_DATASOURCE_PASSWORD }}
 
 jobs:
   build:
@@ -95,6 +96,31 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Sync secrets and render Cloud Run secrets map
+        run: |
+          set -euo pipefail
+          rendered=""
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            key="${line%%=*}"
+            value="${line#*=}"
+            if [ -z "$value" ]; then
+              echo "Skipping $key: value not set" >&2
+              continue
+            fi
+            # Generate a safe Secret Manager name: cr-<service>-<key>
+            key_safe="$(echo "$key" | tr '[:upper:]' '[:lower:]' | tr '_' '-')"
+            secret_name="cr-${CLOUD_RUN_SERVICE}-${key_safe}"
+            # Create secret if needed, then add version
+            if ! gcloud secrets describe "$secret_name" --project "$GCP_PROJECT_ID" >/dev/null 2>&1; then
+              echo "Creating secret $secret_name"
+              gcloud secrets create "$secret_name" --replication-policy="automatic" --project "$GCP_PROJECT_ID"
+            fi
+            printf "%s" "$value" | gcloud secrets versions add "$secret_name" --data-file=- --project "$GCP_PROJECT_ID"
+            rendered="${rendered}${key}=${secret_name}:latest\n"
+          done <<< "$SECRET_VARS"
+          printf "CLOUD_RUN_SECRETS_RENDERED<<'EOF'\n%sEOF\n" "$rendered" >> "$GITHUB_ENV"
+
       - name: Authenticate to Google Cloud (OIDC / WIF)
         uses: google-github-actions/auth@v2
         with:
@@ -113,8 +139,7 @@ jobs:
           region: ${{ env.GCP_REGION }}
           image: ${{ env.IMAGE_URI }}
           env_vars: ${{ env.CLOUD_RUN_ENV_VARS }}
-          secrets: |
-            SPRING_DATASOURCE_PASSWORD=${{ env.SPRING_DATASOURCE_PASSWORD }}:latest
+          secrets: ${{ env.CLOUD_RUN_SECRETS_RENDERED }}
 
       - name: Dump service conditions on failure
         if: failure()

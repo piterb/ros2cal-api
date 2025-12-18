@@ -83,7 +83,8 @@ Required **Variables**:
 - `CLOUD_RUN_SERVICE`
 - `GCP_DEPLOY_SA_EMAIL`
 - `SPRING_DATASOURCE_USERNAME` (plain env value)
-- `SPRING_DATASOURCE_PASSWORD` (GitHub Secret; value = Secret Manager secret name, required for deploy)
+- `SPRING_DATASOURCE_PASSWORD` (GitHub Secret; value = DB password)
+- `SPRING_DATASOURCE_PASSWORD_SECRET_NAME` (GitHub Variable; Secret Manager name, default `spring-datasource-password`)
 - `SPRING_DATASOURCE_URL` (plain env value)
 - `SPRING_PROFILES_ACTIVE` (optional)
 
