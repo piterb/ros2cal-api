@@ -130,7 +130,7 @@ jobs:
             rendered="${rendered}${key}=${secret_name}:latest\n"
           done <<< "$SECRET_VARS"
           {
-            echo "CLOUD_RUN_SECRETS_RENDERED<<'EOF'"
+            echo "CLOUD_RUN_SECRETS_RENDERED<<EOF"
             # printf keeps \n intact for multiline secrets block
             printf "%b" "$rendered"
             echo "EOF"
