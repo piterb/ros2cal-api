@@ -109,6 +109,9 @@ jobs:
       - name: Sync secrets and render Cloud Run secrets map
         run: |
           set -euo pipefail
+
+          PROJECT_NUMBER="$(gcloud projects describe "$GCP_PROJECT_ID" --format='value(projectNumber)')"
+          
           rendered=""
           while IFS= read -r line; do
             [ -z "$line" ] && continue
@@ -127,7 +130,7 @@ jobs:
               gcloud secrets create "$secret_name" --replication-policy="automatic" --project "$GCP_PROJECT_ID"
             fi
             printf "%s" "$value" | gcloud secrets versions add "$secret_name" --data-file=- --project "$GCP_PROJECT_ID"
-            rendered="${rendered}${key}=${secret_name}:latest\n"
+            rendered="${rendered}${key}=projects/${PROJECT_NUMBER}/secrets/${secret_name}:latest\n"
           done <<< "$SECRET_VARS"
           {
             echo "CLOUD_RUN_SECRETS_RENDERED<<EOF"
