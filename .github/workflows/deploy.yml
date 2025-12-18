@@ -129,7 +129,12 @@ jobs:
             printf "%s" "$value" | gcloud secrets versions add "$secret_name" --data-file=- --project "$GCP_PROJECT_ID"
             rendered="${rendered}${key}=${secret_name}:latest\n"
           done <<< "$SECRET_VARS"
-          printf "CLOUD_RUN_SECRETS_RENDERED<<'EOF'\n%sEOF\n" "$rendered" >> "$GITHUB_ENV"
+          {
+            echo "CLOUD_RUN_SECRETS_RENDERED<<'EOF'"
+            # printf keeps \n intact for multiline secrets block
+            printf "%b" "$rendered"
+            echo "EOF"
+          } >> "$GITHUB_ENV"
 
       - name: Deploy to Cloud Run
         id: deploy
