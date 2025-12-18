@@ -19,6 +19,10 @@ terraform plan \
   -var "artifact_repo_name=REPLACE_WITH_ARTIFACT_REPO" \
   -var "cloud_run_service_name=REPLACE_WITH_SERVICE_NAME" \
   -var "cloud_run_image=REPLACE_WITH_IMAGE_URI"
+
+If you omit `artifact_repo_name` or `cloud_run_service_name`, they default to:
+- `<project_id>-artifact`
+- `<project_id>-service`
 ```
 
 ## GitHub Actions usage

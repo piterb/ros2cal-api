@@ -8,6 +8,9 @@ locals {
     "cloudresourcemanager.googleapis.com",
     "serviceusage.googleapis.com",
   ]
+  artifact_repo_name     = coalesce(var.artifact_repo_name, "${var.project_id}-artifact")
+  cloud_run_service_name = coalesce(var.cloud_run_service_name, "${var.project_id}-service")
+  tf_admin_sa_email      = "${var.tf_admin_service_account_id}@${var.project_id}.iam.gserviceaccount.com"
 }
 
 resource "google_project_service" "required" {
@@ -24,6 +27,12 @@ resource "google_service_account" "runtime" {
   display_name = "Cloud Run Runtime"
 }
 
+resource "google_service_account_iam_member" "runtime_act_as" {
+  service_account_id = google_service_account.runtime.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${local.tf_admin_sa_email}"
+}
+
 resource "google_project_iam_member" "runtime_secret_access" {
   project = var.project_id
   role    = "roles/secretmanager.secretAccessor"
@@ -33,7 +42,7 @@ resource "google_project_iam_member" "runtime_secret_access" {
 resource "google_artifact_registry_repository" "docker" {
   project       = var.project_id
   location      = var.region
-  repository_id = var.artifact_repo_name
+  repository_id = local.artifact_repo_name
   description   = "Docker repository"
   format        = "DOCKER"
 
@@ -41,7 +50,7 @@ resource "google_artifact_registry_repository" "docker" {
 }
 
 resource "google_cloud_run_v2_service" "app" {
-  name     = var.cloud_run_service_name
+  name     = local.cloud_run_service_name
   location = var.region
   project  = var.project_id
 
