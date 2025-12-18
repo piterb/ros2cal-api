@@ -12,19 +12,25 @@ variable "region" {
 variable "artifact_repo_name" {
   description = "Artifact Registry repository name"
   type        = string
-  default     = "REPLACE_WITH_ARTIFACT_REPO"
+  default     = null
 }
 
 variable "cloud_run_service_name" {
   description = "Cloud Run service name"
   type        = string
-  default     = "REPLACE_WITH_SERVICE_NAME"
+  default     = null
 }
 
 variable "runtime_service_account_id" {
   description = "Cloud Run runtime service account ID"
   type        = string
   default     = "cloud-run-runtime"
+}
+
+variable "tf_admin_service_account_id" {
+  description = "Terraform admin service account ID (used to grant actAs on runtime SA)"
+  type        = string
+  default     = "tf-admin"
 }
 
 variable "allow_unauthenticated" {
