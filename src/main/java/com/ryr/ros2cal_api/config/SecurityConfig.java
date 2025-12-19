@@ -11,7 +11,6 @@ import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtIssuerAuthenticationManagerResolver;
 import org.springframework.security.web.SecurityFilterChain;
 
@@ -41,8 +40,7 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.ignoringRequestMatchers("/api/**"))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .oauth2ResourceServer(oauth2 -> oauth2
-                        .authenticationManagerResolver(resolver)
-                        .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())))
+                        .authenticationManagerResolver(resolver))
                 .httpBasic(Customizer.withDefaults());
 
         return http.build();
@@ -51,12 +49,10 @@ public class SecurityConfig {
     private AuthenticationManagerResolver<HttpServletRequest> authenticationManagerResolver() {
         List<String> issuers = securityProperties.getAllowedIssuers();
         if (issuers == null || issuers.isEmpty()) {
-            throw new IllegalStateException("app.security.allowed-issuers must be configured with at least one issuer URI");
+            // Fallback to Google Accounts issuer so the app can start locally unless overridden via AUTH_ISSUER_URIS.
+            issuers = List.of("https://accounts.google.com");
         }
         return JwtIssuerAuthenticationManagerResolver.fromTrustedIssuers(issuers);
     }
 
-    private JwtAuthenticationConverter jwtAuthenticationConverter() {
-        return new JwtAuthenticationConverter();
-    }
 }
