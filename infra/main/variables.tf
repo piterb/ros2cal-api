@@ -67,3 +67,20 @@ variable "cloud_run_image" {
   type        = string
   default     = "gcr.io/cloudrun/hello"
 }
+
+variable "identity_authorized_domains" {
+  description = "Authorized domains for Google Identity Platform (include localhost and client origins)"
+  type        = list(string)
+  default     = null
+}
+
+variable "identity_google_client_id" {
+  description = "OAuth client ID for Google Identity Platform Google provider"
+  type        = string
+}
+
+variable "identity_google_client_secret" {
+  description = "OAuth client secret for Google Identity Platform Google provider"
+  type        = string
+  sensitive   = true
+}

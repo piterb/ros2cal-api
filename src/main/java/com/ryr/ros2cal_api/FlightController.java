@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class FlightController {
 
-    @GetMapping("/flightz")
+    @GetMapping("/api/flightz")
     public ResponseEntity<String> flight() {
         return ResponseEntity.ok("ok");
     }

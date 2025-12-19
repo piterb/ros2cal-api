@@ -27,6 +27,7 @@ env:
     SPRING_PROFILES_ACTIVE=${{ vars.SPRING_PROFILES_ACTIVE }}
     SPRING_DATASOURCE_USERNAME=${{ vars.SPRING_DATASOURCE_USERNAME }}
     SPRING_DATASOURCE_URL=${{ vars.SPRING_DATASOURCE_URL }}
+    AUTH_ISSUER_URIS=${{ vars.AUTH_ISSUER_URIS }}
 
   # Secrets (value = GitHub Secret). Names in Secret Manager sa generujú automaticky.
   SECRET_VARS: |
@@ -109,9 +110,6 @@ jobs:
       - name: Sync secrets and render Cloud Run secrets map
         run: |
           set -euo pipefail
-
-          PROJECT_NUMBER="$(gcloud projects describe "$GCP_PROJECT_ID" --format='value(projectNumber)')"
-          
           rendered=""
           while IFS= read -r line; do
             [ -z "$line" ] && continue
@@ -130,7 +128,7 @@ jobs:
               gcloud secrets create "$secret_name" --replication-policy="automatic" --project "$GCP_PROJECT_ID"
             fi
             printf "%s" "$value" | gcloud secrets versions add "$secret_name" --data-file=- --project "$GCP_PROJECT_ID"
-            rendered="${rendered}${key}=projects/${PROJECT_NUMBER}/secrets/${secret_name}:latest\n"
+            rendered="${rendered}${key}=projects/${GCP_PROJECT_ID}/secrets/${secret_name}:latest\n"
           done <<< "$SECRET_VARS"
           {
             echo "CLOUD_RUN_SECRETS_RENDERED<<EOF"

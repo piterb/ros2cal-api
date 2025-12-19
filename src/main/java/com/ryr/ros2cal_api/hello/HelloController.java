@@ -13,7 +13,7 @@ public class HelloController {
 
     private final HelloService helloService;
 
-    @GetMapping("/hello")
+    @GetMapping("/api/hello")
     public ResponseEntity<HelloResponse> createHello(@RequestParam(name = "message") String message) {
         Hello saved = helloService.save(message);
         HelloResponse response = new HelloResponse(saved.getId(), saved.getMessage(), saved.getCreatedAt());

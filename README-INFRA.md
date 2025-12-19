@@ -83,13 +83,16 @@ Required **Variables**:
 - `CLOUD_RUN_SERVICE`
 - `GCP_DEPLOY_SA_EMAIL`
 - `SPRING_DATASOURCE_USERNAME` (plain env value)
-- `SPRING_DATASOURCE_PASSWORD` (GitHub Secret; value = DB password)
 - `SPRING_DATASOURCE_PASSWORD_SECRET_NAME` (GitHub Variable; Secret Manager name, default `spring-datasource-password`)
 - `SPRING_DATASOURCE_URL` (plain env value)
 - `SPRING_PROFILES_ACTIVE` (optional)
+- `AUTH_ISSUER_URIS` (comma-separated issuers, e.g., `https://securetoken.google.com/<project_id>,https://accounts.google.com`)
+- `IDENTITY_GOOGLE_CLIENT_ID` (OAuth client ID for Google IdP)
+- `IDENTITY_AUTHORIZED_DOMAINS` (optional; comma-separated domains for Identity Platform auth)
 
 Required **Secrets**:
-- None for OIDC; all sensitive values should be in Secret Manager.
+- `SPRING_DATASOURCE_PASSWORD` (DB password; synced into Secret Manager at deploy)
+- `IDENTITY_GOOGLE_CLIENT_SECRET` (OAuth client secret for Google IdP)
 
 ## Branch protection guidance (recommended)
 - Require PR reviews for `main` (at least 1 reviewer).
@@ -101,3 +104,56 @@ Required **Secrets**:
 - `infra/bootstrap` should not be run in CI.
 - `infra/main` uses remote state in GCS.
 - The deploy workflow uses Secret Manager secret names, not values.
+
+## Authentication (Google Identity Platform)
+- Terraform (main) now enables Identity Platform, turns on Email/Password sign-in, and wires Google IdP (client ID/secret from GitHub vars/secrets).
+- Allowed domains default to `localhost`, `oauth.pstmn.io`, `<project_id>.cloud.goog`, `run.app`; override with `IDENTITY_AUTHORIZED_DOMAINS`.
+- Terraform outputs `IDENTITY_PLATFORM_ISSUER` (e.g., `https://securetoken.google.com/<project_id>`) and `IDENTITY_PLATFORM_API_KEY` (sensitive) for Identity Toolkit REST flows.
+- App expects `AUTH_ISSUER_URIS` (set in GitHub vars) and will read comma-separated issuers. Recommended: `https://securetoken.google.com/<project_id>,https://accounts.google.com`.
+
+### Google OAuth client (for Google IdP + Postman)
+1) GCP: APIs & Services → Credentials → **Create OAuth client** → type **Web application**.
+2) Fill in:
+   - Name: e.g., `rosterapp-backend-google-idp` (so it’s clear it serves the backend)
+   - Authorized redirect URIs (for testing):
+     - `https://oauth.pstmn.io/v1/callback` (Postman)
+     - `http://localhost:8080/login/oauth2/code/google` (if you ever test local Spring OAuth flow)
+     - `http://localhost:3000` or another local front/BFF callback if you have one
+   - Authorized JavaScript origins: leave empty unless you have an SPA on a specific domain.
+3) Create → copy **Client ID** into `IDENTITY_GOOGLE_CLIENT_ID` (GitHub variable) and **Client Secret** into `IDENTITY_GOOGLE_CLIENT_SECRET` (GitHub Secret).
+4) When you have a frontend/BFF on a GCP domain, add its redirect URI (and JS origin if SPA) to this same client.
+
+### OAuth consent screen (required for the Google client)
+1) GCP: APIs & Services → OAuth consent screen.
+2) User type: External (typical) → Create.
+3) Fill in:
+   - App name (e.g., `RosterApp Auth`)
+   - User support email
+   - Developer contact email
+   - (Optional) App domain/homepage/privacy/terms – can stay empty for Testing.
+4) Authorized domains: add domains from `IDENTITY_AUTHORIZED_DOMAINS` (e.g., `localhost`, `oauth.pstmn.io`, `<project_id>.cloud.goog`, `run.app`, or your custom).
+5) Save & Continue; scopes can stay default (openid/profile/email).
+6) Test users: add accounts if you keep the app in **Testing**; for **Production** publish it and expect Google review if you add custom domains.
+
+### Postman (Authorization Code + PKCE)
+- Grant Type: Authorization Code (With PKCE), Code Challenge Method: S256.
+- Auth URL: `https://accounts.google.com/o/oauth2/v2/auth`
+- Token URL: `https://oauth2.googleapis.com/token`
+- Client ID/Secret: from Identity Platform Google IdP (above).
+- Redirect URI: `https://oauth.pstmn.io/v1/callback`
+- Scopes: `openid profile email`
+- After obtaining tokens, use the **ID token** as `Authorization: Bearer <id_token>` to call `/api/me`.
+- For email/password users, create them via Identity Platform API using the `IDENTITY_PLATFORM_API_KEY`, then use the returned ID token.
+
+### Example calls
+- Health (public): `curl -i https://<cloud-run-host>/actuator/health`
+- WhoAmI: `curl -i -H "Authorization: Bearer <ID_TOKEN>" https://<cloud-run-host>/api/me`
+
+### Troubleshooting
+- 401 with issuer mismatch: ensure `AUTH_ISSUER_URIS` includes the issuer of your token.
+- Audience mismatch: ID token must target your client/project; use the same client ID configured in Identity Platform.
+- Opaque access token: use the ID token (JWT) from the Authorization Code + PKCE flow.
+
+### Test strategy
+- CI uses `spring-security-test` with mock JWTs; no real Google tokens are required for tests.
+- `/actuator/health` stays public; `/api/**` requires a Bearer JWT.
