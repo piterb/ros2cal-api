@@ -153,6 +153,12 @@ resource "google_project_iam_member" "tf_admin_identity_platform_admin" {
   member  = "serviceAccount:${local.tf_admin_sa_email}"
 }
 
+resource "google_project_iam_member" "tf_admin_firebase_admin" {
+  project = var.project_id
+  role    = "roles/firebase.admin"
+  member  = "serviceAccount:${local.tf_admin_sa_email}"
+}
+
 resource "google_project_iam_member" "tf_admin_service_usage_admin" {
   project = var.project_id
   role    = "roles/serviceusage.serviceUsageAdmin"
@@ -164,9 +170,10 @@ resource "time_sleep" "wait_for_identity_perms" {
     google_project_service.required,
     google_project_iam_member.tf_admin_identity_platform,
     google_project_iam_member.tf_admin_identity_platform_admin,
+    google_project_iam_member.tf_admin_firebase_admin,
     google_project_iam_member.tf_admin_service_usage_admin,
   ]
-  create_duration = "30s"
+  create_duration = "60s"
 }
 
 resource "google_artifact_registry_repository" "docker" {
