@@ -18,6 +18,7 @@ locals {
   cloud_run_service_name = coalesce(var.cloud_run_service_name, "${var.project_id}-service")
   tf_admin_sa_email      = "${var.tf_admin_service_account_id}@${var.project_id}.iam.gserviceaccount.com"
   wif_principal_set      = "principalSet://iam.googleapis.com/projects/${data.google_project.current.number}/locations/global/workloadIdentityPools/${var.wif_pool_id}/attribute.repository/${var.github_repo}"
+  project_number         = data.google_project.current.number
 }
 
 resource "google_project_service" "required" {
@@ -41,9 +42,7 @@ resource "google_identity_platform_config" "default" {
 
   depends_on = [
     google_project_service.required,
-    google_project_iam_member.tf_admin_identity_platform,
-    google_project_iam_member.tf_admin_identity_platform_admin,
-    google_project_iam_member.tf_admin_service_usage_admin,
+    time_sleep.wait_for_identity_perms,
   ]
 }
 
@@ -57,9 +56,7 @@ resource "google_identity_platform_default_supported_idp_config" "google" {
   depends_on = [
     google_project_service.required,
     google_identity_platform_config.default,
-    google_project_iam_member.tf_admin_identity_platform,
-    google_project_iam_member.tf_admin_identity_platform_admin,
-    google_project_iam_member.tf_admin_service_usage_admin,
+    time_sleep.wait_for_identity_perms,
   ]
 }
 
@@ -160,6 +157,16 @@ resource "google_project_iam_member" "tf_admin_service_usage_admin" {
   project = var.project_id
   role    = "roles/serviceusage.serviceUsageAdmin"
   member  = "serviceAccount:${local.tf_admin_sa_email}"
+}
+
+resource "time_sleep" "wait_for_identity_perms" {
+  depends_on = [
+    google_project_service.required,
+    google_project_iam_member.tf_admin_identity_platform,
+    google_project_iam_member.tf_admin_identity_platform_admin,
+    google_project_iam_member.tf_admin_service_usage_admin,
+  ]
+  create_duration = "30s"
 }
 
 resource "google_artifact_registry_repository" "docker" {
