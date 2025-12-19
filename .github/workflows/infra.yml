@@ -27,6 +27,8 @@ env:
   TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
   TF_VAR_region: ${{ vars.GCP_REGION }}
   TF_VAR_github_repo: ${{ github.repository }}
+  TF_VAR_identity_google_client_id: ${{ vars.IDENTITY_GOOGLE_CLIENT_ID }}
+  TF_VAR_identity_google_client_secret: ${{ secrets.IDENTITY_GOOGLE_CLIENT_SECRET }}
 
 jobs:
   terraform:

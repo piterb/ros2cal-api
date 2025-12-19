@@ -7,6 +7,8 @@ locals {
     "run.googleapis.com",
     "artifactregistry.googleapis.com",
     "secretmanager.googleapis.com",
+    "identitytoolkit.googleapis.com",
+    "apikeys.googleapis.com",
     "iam.googleapis.com",
     "iamcredentials.googleapis.com",
     "cloudresourcemanager.googleapis.com",
@@ -16,6 +18,14 @@ locals {
   cloud_run_service_name = coalesce(var.cloud_run_service_name, "${var.project_id}-service")
   tf_admin_sa_email      = "${var.tf_admin_service_account_id}@${var.project_id}.iam.gserviceaccount.com"
   wif_principal_set      = "principalSet://iam.googleapis.com/projects/${data.google_project.current.number}/locations/global/workloadIdentityPools/${var.wif_pool_id}/attribute.repository/${var.github_repo}"
+  identity_authorized_domains = (
+    var.identity_authorized_domains != null && length(var.identity_authorized_domains) > 0
+  ) ? var.identity_authorized_domains : [
+    "localhost",
+    "oauth.pstmn.io",
+    "${var.project_id}.cloud.goog",
+    "run.app"
+  ]
 }
 
 resource "google_project_service" "required" {
@@ -24,6 +34,46 @@ resource "google_project_service" "required" {
   project            = var.project_id
   service            = each.value
   disable_on_destroy = false
+}
+
+resource "google_identity_platform_project_default_config" "default" {
+  provider = google-beta
+  project  = var.project_id
+
+  sign_in {
+    email {
+      enabled            = true
+      password_required  = true
+    }
+  }
+
+  authorized_domains = local.identity_authorized_domains
+
+  depends_on = [google_project_service.required]
+}
+
+resource "google_identity_platform_default_supported_idp_config" "google" {
+  provider      = google-beta
+  idp_id        = "google.com"
+  client_id     = var.identity_google_client_id
+  client_secret = var.identity_google_client_secret
+  enabled       = true
+
+  depends_on = [google_project_service.required]
+}
+
+resource "google_apikeys_key" "identity_platform" {
+  name         = "${var.project_id}-identity-platform-key"
+  display_name = "identity-platform-api-key"
+  project      = var.project_id
+
+  restrictions {
+    api_targets {
+      service = "identitytoolkit.googleapis.com"
+    }
+  }
+
+  depends_on = [google_project_service.required]
 }
 
 resource "google_service_account" "runtime" {

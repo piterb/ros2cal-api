@@ -29,6 +29,10 @@ If you omit `cloud_run_image`, the service is created with `gcr.io/cloudrun/hell
 
 Public access
 - `allow_unauthenticated` defaults to `true`, so Cloud Run gets `allUsers` with `roles/run.invoker`.
+
+Identity Platform (auth)
+- Requires `identity_google_client_id` and `identity_google_client_secret` (Google IdP).
+- Optional `identity_authorized_domains` (comma-separated) overrides the default domains used for Identity Platform.
 ```
 
 ## GitHub Actions usage

@@ -17,3 +17,14 @@ output "GCP_DEPLOY_SA_EMAIL" {
   description = "Deploy service account email (matches GitHub Environment var name)"
   value       = google_service_account.runtime.email
 }
+
+output "IDENTITY_PLATFORM_ISSUER" {
+  description = "Identity Platform issuer URI (use for AUTH_ISSUER_URIS)"
+  value       = "https://securetoken.google.com/${var.project_id}"
+}
+
+output "IDENTITY_PLATFORM_API_KEY" {
+  description = "Identity Platform API key for REST/PKCE flows"
+  value       = google_apikeys_key.identity_platform.key_string
+  sensitive   = true
+}

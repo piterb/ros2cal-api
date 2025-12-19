@@ -22,3 +22,8 @@ management:
       enabled: true
     readinessstate:
       enabled: true
+
+app:
+  security:
+    # Comma-separated issuer URIs (e.g., https://securetoken.google.com/<project_id>[,https://accounts.google.com])
+    allowed-issuers: ${AUTH_ISSUER_URIS:}
