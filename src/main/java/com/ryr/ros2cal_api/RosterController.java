@@ -1,12 +1,13 @@
 package com.ryr.ros2cal_api;
 
-import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.util.LinkedHashMap;
-import java.util.Map;
 import javax.imageio.ImageIO;
 
+import com.ryr.ros2cal_api.roster.RosterConversionService;
+import com.ryr.ros2cal_api.roster.RosterIcsExporter;
+import com.ryr.ros2cal_api.roster.RosterParseResult;
+import com.ryr.ros2cal_api.roster.RosterProperties;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -24,13 +25,23 @@ public class RosterController {
 
     private static final long DEFAULT_MAX_BYTES = 5L * 1024 * 1024;
     private final long maxUploadBytes;
+    private final RosterConversionService rosterConversionService;
+    private final RosterIcsExporter rosterIcsExporter;
+    private final RosterProperties rosterProperties;
 
-    public RosterController(@Value("${spring.servlet.multipart.max-file-size:" + DEFAULT_MAX_BYTES + "}") long maxUploadBytes) {
+    public RosterController(
+            @Value("${spring.servlet.multipart.max-file-size:" + DEFAULT_MAX_BYTES + "}") long maxUploadBytes,
+            RosterConversionService rosterConversionService,
+            RosterIcsExporter rosterIcsExporter,
+            RosterProperties rosterProperties) {
         this.maxUploadBytes = maxUploadBytes;
+        this.rosterConversionService = rosterConversionService;
+        this.rosterIcsExporter = rosterIcsExporter;
+        this.rosterProperties = rosterProperties;
     }
 
     @PostMapping(value = "/convert", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<Map<String, Object>> convertRoster(
+    public ResponseEntity<?> convertRoster(
             @RequestParam("image") MultipartFile image,
             @RequestParam(value = "format", required = false) String format) {
         if (image == null || image.isEmpty()) {
@@ -50,19 +61,21 @@ public class RosterController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "image must be JPG or PNG");
         }
 
-        BufferedImage bufferedImage = readImage(bytes);
-        if (bufferedImage == null) {
+        if (readImage(bytes) == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid image content");
         }
 
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("filename", image.getOriginalFilename());
-        body.put("content_type", image.getContentType());
-        body.put("size_bytes", image.getSize());
-        body.put("width", bufferedImage.getWidth());
-        body.put("height", bufferedImage.getHeight());
-        body.put("requested_format", normalizedFormat);
-        return ResponseEntity.ok(body);
+        RosterParseResult result = rosterConversionService.parseRoster(bytes);
+        if ("ics".equals(normalizedFormat)) {
+            String ics = rosterIcsExporter.jsonToIcs(
+                    result.getData(),
+                    rosterProperties.getCalendarName(),
+                    rosterProperties.getLocalTz());
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType("text/calendar"))
+                    .body(ics);
+        }
+        return ResponseEntity.ok(result.getData());
     }
 
     private String normalizeFormat(String format) {
@@ -80,7 +93,7 @@ public class RosterController {
         }
     }
 
-    private BufferedImage readImage(byte[] bytes) {
+    private Object readImage(byte[] bytes) {
         try {
             return ImageIO.read(new ByteArrayInputStream(bytes));
         } catch (IOException ex) {

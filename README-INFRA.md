@@ -90,6 +90,12 @@ Required **Variables**:
 - `CORS_ALLOWED_ORIGINS` (comma-separated origins, e.g., `http://localhost:3000,https://app.example.com`)
 - `MULTIPART_MAX_FILE_SIZE` (max size per uploaded file, e.g., `5242880` for 5 MB)
 - `MULTIPART_MAX_REQUEST_SIZE` (max total request size, e.g., `5242880` for 5 MB)
+- `OPENAI_API_KEY` (OpenAI key for roster OCR/parse)
+- `OPENAI_BASE_URL` (optional, default `https://api.openai.com/v1`)
+- `OPENAI_OCR_MODEL` (default `gpt-4.1`)
+- `OPENAI_PARSE_MODEL` (default `gpt-5.1`)
+- `ROSTER_LOCAL_TZ` (local timezone for ICS descriptions, default `Europe/Berlin`)
+- `ROSTER_CALENDAR_NAME` (calendar name for ICS PRODID, default `Roster`)
 - `IDENTITY_GOOGLE_CLIENT_ID` (OAuth client ID for Google IdP)
 
 Required **Secrets**:

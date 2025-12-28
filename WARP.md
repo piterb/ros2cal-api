@@ -30,6 +30,12 @@ When running locally against a real Postgres instance, the app expects the usual
 - `CORS_ALLOWED_ORIGINS` (comma-separated origins; wired into `app.security.allowed-origins`).
 - `MULTIPART_MAX_FILE_SIZE` (max size per uploaded file; wired into `spring.servlet.multipart.max-file-size`).
 - `MULTIPART_MAX_REQUEST_SIZE` (max total request size; wired into `spring.servlet.multipart.max-request-size`).
+- `OPENAI_API_KEY` (OpenAI key for roster OCR/parse).
+- `OPENAI_BASE_URL` (optional, default `https://api.openai.com/v1`).
+- `OPENAI_OCR_MODEL` (default `gpt-4.1`).
+- `OPENAI_PARSE_MODEL` (default `gpt-5.1`).
+- `ROSTER_LOCAL_TZ` (local timezone for ICS descriptions, default `Europe/Berlin`).
+- `ROSTER_CALENDAR_NAME` (calendar name for ICS PRODID, default `Roster`).
 
 ### Docker image
 
@@ -47,6 +53,11 @@ The Docker build uses a Gradle builder image and produces a distroless Java 17 i
       -e CORS_ALLOWED_ORIGINS="http://localhost:3000" \
       -e MULTIPART_MAX_FILE_SIZE=262144 \
       -e MULTIPART_MAX_REQUEST_SIZE=262144 \
+      -e OPENAI_API_KEY="sk-..." \
+      -e OPENAI_OCR_MODEL="gpt-4.1" \
+      -e OPENAI_PARSE_MODEL="gpt-5.1" \
+      -e ROSTER_LOCAL_TZ="Europe/Berlin" \
+      -e ROSTER_CALENDAR_NAME="Roster" \
       app:local`
 
 CI builds and pushes an image for Cloud Run using the `Deploy` workflow (`.github/workflows/deploy.yml`); it tags the image as:
