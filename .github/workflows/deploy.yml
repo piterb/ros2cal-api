@@ -33,6 +33,7 @@ env:
   # Secrets (value = GitHub Secret). Names in Secret Manager sa generujú automaticky.
   SECRET_VARS: |
     SPRING_DATASOURCE_PASSWORD=${{ secrets.SPRING_DATASOURCE_PASSWORD }}
+    OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
 
 jobs:
   build:
