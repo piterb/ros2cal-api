@@ -32,6 +32,11 @@ public class OpenAiProperties {
      */
     private Duration requestTimeout = Duration.ofSeconds(90);
 
+    /**
+     * Enable OpenAI prompt cache reuse.
+     */
+    private boolean enableCache = true;
+
     public String getApiKey() {
         return apiKey;
     }
@@ -70,5 +75,13 @@ public class OpenAiProperties {
 
     public void setRequestTimeout(Duration requestTimeout) {
         this.requestTimeout = requestTimeout;
+    }
+
+    public boolean isEnableCache() {
+        return enableCache;
+    }
+
+    public void setEnableCache(boolean enableCache) {
+        this.enableCache = enableCache;
     }
 }

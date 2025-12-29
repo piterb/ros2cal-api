@@ -20,3 +20,5 @@ app:
   security:
     allowed-issuers:
       - https://issuer.example.com
+  openai:
+    enable-cache: ${OPENAI_ENABLE_CACHE:true}

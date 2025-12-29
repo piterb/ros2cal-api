@@ -33,6 +33,8 @@ app:
     base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
     ocr-model: ${OPENAI_OCR_MODEL:gpt-4.1}
     parse-model: ${OPENAI_PARSE_MODEL:gpt-5.1}
+    enable-cache: ${OPENAI_ENABLE_CACHE:true}
+    request-timeout: ${OPENAI_REQUEST_TIMEOUT:PT180S}
   roster:
     local-tz: ${ROSTER_LOCAL_TZ:Europe/Berlin}
     calendar-name: ${ROSTER_CALENDAR_NAME:Roster}

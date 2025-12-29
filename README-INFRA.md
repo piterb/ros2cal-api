@@ -130,18 +130,22 @@ Required **Secrets**:
 
 ## Manual OpenAI regression test
 There is a manual integration test that calls the real OpenAI API and compares the OCR/parse output
-against a golden JSON file in `src/test/resources/fixtures/roster-openai/roster_new.json`. It is
+against a golden JSON file in `src/test/resources/fixtures/roster-openai/roster_expected.json`. It is
 disabled by default to avoid costs and CI flakiness.
 
 Run it manually:
 
 ```bash
-OPENAI_API_KEY=sk-... ./gradlew openaiIT
+./scripts/run-test-openai-int.sh
 ```
 
 Notes:
-- Uses `src/test/resources/fixtures/roster-openai/roster.jpg` as input.
+- Uses `src/test/resources/fixtures/roster-openai/roster_input.jpg` as input.
+- Expected JSON: `src/test/resources/fixtures/roster-openai/roster_expected.json`.
+- Expected ICS: `src/test/resources/fixtures/roster-openai/roster_expected.ics`.
 - Fixed model versions: `gpt-4.1-2025-04-14` (OCR) and `gpt-5.1-2025-11-13` (parse).
+- To bypass OpenAI prompt cache for a fresh run, set `OPENAI_ENABLE_CACHE=false`.
+- The script reads `OPENAI_API_KEY` from `.env` if present.
      - `http://localhost:3000` or another local front/BFF callback if you have one
    - Authorized JavaScript origins: leave empty unless you have an SPA on a specific domain.
 3) Create → copy **Client ID** into `IDENTITY_GOOGLE_CLIENT_ID` (GitHub variable) and **Client Secret** into `IDENTITY_GOOGLE_CLIENT_SECRET` (GitHub Secret).

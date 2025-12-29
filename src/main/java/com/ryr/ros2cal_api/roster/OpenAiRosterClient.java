@@ -2,6 +2,7 @@ package com.ryr.ros2cal_api.roster;
 
 import java.util.Base64;
 import java.util.List;
+import java.util.UUID;
 
 import com.openai.client.OpenAIClient;
 import com.openai.errors.OpenAIException;
@@ -12,6 +13,7 @@ import com.openai.models.responses.ResponseInputImage;
 import com.openai.models.responses.ResponseInputItem;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import java.util.Map;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
@@ -48,15 +50,17 @@ public class OpenAiRosterClient {
                 .addContent(image)
                 .build());
 
-        ResponseCreateParams params = ResponseCreateParams.builder()
+        ResponseCreateParams.Builder paramsBuilder = ResponseCreateParams.builder()
                 .model(properties.getOcrModel())
                 .temperature(0.0)
                 .topP(1.0)
-                .inputOfResponse(List.of(system, user))
-                .build();
+                .inputOfResponse(List.of(system, user));
+        String cacheKey = applyCacheControl(paramsBuilder);
+        ResponseCreateParams params = paramsBuilder.build();
         log.info(
-                "OpenAI OCR request model={} system_prompt={} user_prompt={} image_bytes={} image_base64_chars={}",
+                "OpenAI OCR request model={} cache_key={} system_prompt={} user_prompt={} image_bytes={} image_base64_chars={}",
                 properties.getOcrModel(),
+                cacheKey,
                 truncateText(RosterPrompts.SYSTEM_PROMPT_OCR),
                 truncateText("Transcribe the roster in this image exactly as text."),
                 pngBytes.length,
@@ -64,7 +68,9 @@ public class OpenAiRosterClient {
         Response response = execute(params);
         String outputText = extractOutputText(response);
         log.info("OpenAI OCR response output_chars={} output_text={}", outputText.length(), truncateText(outputText));
-        return new OpenAiResult(outputText, extractUsage(response));
+        CallUsage usage = extractUsage(response);
+        logUsage("OpenAI OCR usage", usage);
+        return new OpenAiResult(outputText, usage);
     }
 
     public OpenAiResult parseRosterText(String rosterText) {
@@ -77,21 +83,25 @@ public class OpenAiRosterClient {
                 .role(ResponseInputItem.Message.Role.USER)
                 .addInputTextContent(rosterText)
                 .build());
-        ResponseCreateParams params = ResponseCreateParams.builder()
+        ResponseCreateParams.Builder paramsBuilder = ResponseCreateParams.builder()
                 .model(properties.getParseModel())
                 .temperature(0.0)
                 .topP(1.0)
-                .inputOfResponse(List.of(system, user))
-                .build();
+                .inputOfResponse(List.of(system, user));
+        String cacheKey = applyCacheControl(paramsBuilder);
+        ResponseCreateParams params = paramsBuilder.build();
         log.info(
-                "OpenAI parse request model={} system_prompt={} input_text={}",
+                "OpenAI parse request model={} cache_key={} system_prompt={} input_text={}",
                 properties.getParseModel(),
+                cacheKey,
                 truncateText(RosterPrompts.SYSTEM_PROMPT_PARSE),
                 truncateText(rosterText));
         Response response = execute(params);
         String outputText = extractOutputText(response);
         log.info("OpenAI parse response output_chars={} output_text={}", outputText.length(), truncateText(outputText));
-        return new OpenAiResult(outputText, extractUsage(response));
+        CallUsage usage = extractUsage(response);
+        logUsage("OpenAI parse usage", usage);
+        return new OpenAiResult(outputText, usage);
     }
 
     private Response execute(ResponseCreateParams params) {
@@ -157,6 +167,29 @@ public class OpenAiRosterClient {
     }
 
     public record OpenAiResult(String outputText, CallUsage usage) {}
+
+    private void logUsage(String label, CallUsage usage) {
+        if (usage == null) {
+            return;
+        }
+        log.info(
+                "{} input_tokens={} output_tokens={} cached_input_tokens={} total_tokens={}",
+                label,
+                usage.getInputTokens(),
+                usage.getOutputTokens(),
+                usage.getCachedInputTokens(),
+                usage.getEffectiveTotal());
+    }
+
+    private String applyCacheControl(ResponseCreateParams.Builder builder) {
+        if (!properties.isEnableCache()) {
+            String key = UUID.randomUUID().toString();
+            builder.promptCacheKey(key);
+            log.info("OpenAI cache bypass enabled via prompt_cache_key={}", key);
+            return key;
+        }
+        return "default";
+    }
 
     private String truncateText(String value) {
         if (value == null) {
